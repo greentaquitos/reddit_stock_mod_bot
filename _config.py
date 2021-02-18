@@ -17,3 +17,5 @@ BOT_PASSWORD = ""
 # description of bot to label its request for reddit admin
 USER_AGENT = "subreddit manager for /r/"+SUBREDDIT
 
+# what it says
+MARKETSTACK_API_KEY = ""
