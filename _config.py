@@ -1,7 +1,7 @@
 
-# email to send big error reports to, or None to turn this off (not set up)
+# reddit user to send big error reports to, or leave blank
+# do not include "u/"
 NOTIFY = ""
-# NOTIFY = None
 
 # subreddit for the bot to moderate
 SUBREDDIT = ""
@@ -10,12 +10,12 @@ SUBREDDIT = ""
 CLIENT_ID = ""
 CLIENT_SECRET = ""
 
-# normal bot login info
+# normal reddit bot login info
 BOT_NAME = ""
 BOT_PASSWORD = ""
 
 # description of bot to label its request for reddit admin
 USER_AGENT = "subreddit manager for /r/"+SUBREDDIT
 
-# what it says
+# api key from marketstack account
 MARKETSTACK_API_KEY = ""
