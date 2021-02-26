@@ -31,8 +31,7 @@ class Bot:
 
 
 	def log(self, content):
-		if self.debug:
-			print(content)
+		print(content)
 
 
 	def run (self):
