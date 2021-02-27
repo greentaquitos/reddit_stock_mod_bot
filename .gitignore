@@ -3,3 +3,6 @@ __pycache__
 config.py
 database.db
 .DS_Store
+.AppleDB/
+.AppleDesktop/
+:2eDS_Store
