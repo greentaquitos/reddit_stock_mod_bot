@@ -28,7 +28,7 @@ function buildList(){
 			});
 			for (var j = 0; j < data[i]['mentions'].length; j++)
 				tickers += "<span title='"+data[i]['mentions'][j]['time']+"' class='commaMe'>"+data[i]['mentions'][j]['ticker']+"</span>";
-			html += "<tr><td>"+data[i]['name']+"</td><td>"+data[i]['mentions'].length+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data[i]['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
+			html += "<tr><td><a href='https://reddit.com/u/"+data[i]['name']+"'>"+data[i]['name']+"</a></td><td>"+data[i]['mentions'].length+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data[i]['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
 		}
 		html += "</tbody></table></div>";
 
