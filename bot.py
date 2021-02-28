@@ -181,7 +181,10 @@ class Bot:
 		if NOTIFY == '':
 			self.log("NOTIFY not set")
 			return
-		self.r.redditor(NOTIFY).message("encountered an error",str(error))
+		try:
+			self.r.redditor(NOTIFY).message("encountered an error",str(error))
+		except Exception as e:
+			self.log("ERROR NOTIFY FAILED")
 
 
 	def initdb(self):
