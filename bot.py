@@ -4,6 +4,7 @@
 import time
 import sqlite3
 import praw
+import prawcore
 import traceback
 import requests
 import re
@@ -19,6 +20,8 @@ class Bot:
 		self.lastTallyReport = time.time()
 		self.debug = debug
 		self.lastErrorNotif = 0
+		self.lastErrorDelay = 0
+		self.lastResetTime = 0
 
 		self.initWords()
 		self.initdb()
@@ -52,6 +55,9 @@ class Bot:
 				self.handleRuntimeError(e)
 
 			self.log('=== END OF COMMENTS ===')
+
+			if not self.running:
+				break
 
 			try:
 				for post in subPostStream:
@@ -141,17 +147,34 @@ class Bot:
 
 
 	def handleRuntimeError(self, error):
-		if False:
-			self.running = False
+		infostring = str(type(error)) + ': ' + str(error)
 
-		if time.time() - self.lastErrorNotif > 360:
-			self.notifyError(error)
-		
-		self.con.execute("INSERT INTO bot_errors (info, time_created) VALUES (?, ?)", [str(error), round(time.time()*1000)])
+		self.con.execute("INSERT INTO bot_errors (info, time_created) VALUES (?, ?)", [infostring, round(time.time()*1000)])
 		self.con.commit()
 
 		self.log(traceback.format_exc())
-		self.log(error)
+
+		if time.time() - self.lastErrorNotif > 1800:
+			self.notifyError(infostring)
+			self.lastErrorNotif = time.time()
+
+		if isinstance(error, prawcore.exceptions.ServerError):
+			resetStreamUntilFixed()
+
+	def resetStreamUntilFixed(self):
+		self.running = False
+
+		if self.lastErrorDelay == 0 or time.time() - self.lastResetTime > 256:
+			self.lastErrorDelay = delay = 2
+		elif self.lastErrorDelay < 128:
+			self.lastErrorDelay = delay = self.lastErrorDelay*2
+
+		self.lastResetTime = time.time()
+
+		print("Server Error: retrying in "+str(delay))
+		time.sleep(delay)
+		print("retrying")
+		self.run()
 
 
 	def notifyError(self, error):
