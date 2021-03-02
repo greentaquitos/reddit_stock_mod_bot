@@ -2,6 +2,10 @@ body {
   padding-top: 5rem;
 }
 
-.commaMe:after{
+.tickerSymbol:after{
 	content: ",";
+}
+
+.tickerSymbol:last-child:after{
+	content: ""!important;
 }

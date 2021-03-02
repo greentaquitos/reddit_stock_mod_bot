@@ -27,8 +27,8 @@ function buildList(){
 				return a['rawtime'] > b['rawtime'] ? -1 : 1;
 			});
 			for (var j = 0; j < data[i]['mentions'].length; j++)
-				tickers += "<span title='"+data[i]['mentions'][j]['time']+"' class='commaMe'>"+data[i]['mentions'][j]['ticker']+"</span>";
-			html += "<tr><td><a href='https://reddit.com/u/"+data[i]['name']+"'>"+data[i]['name']+"</a></td><td>"+data[i]['mentions'].length+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data[i]['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
+				tickers += "<span title='"+data[i]['mentions'][j]['time']+"' class='tickerSymbol'>"+data[i]['mentions'][j]['ticker']+"</span>";
+			html += "<tr class='tickerListItem'><td><a href='https://reddit.com/u/"+data[i]['name']+"' class='username'>"+data[i]['name']+"</a></td><td>"+data[i]['mentions'].length+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data[i]['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
 		}
 		html += "</tbody></table></div>";
 
@@ -46,7 +46,28 @@ function getLastSeen(){
 }
 
 function readyListeners(){
+
 	// search listener
+	$('#searchbox').prop('disabled',false).on('input', function(){
+		cont = $(this).val();
+
+		if (cont.length < 2)
+			searchFilter(null, null);
+
+		else if (cont.startsWith("$"))
+			searchFilter(cont.substring(1), "ticker");
+
+		else if (cont.startsWith("u/"))
+			searchFilter(cont.substring(2), "user");
+
+		else if (cont.startsWith("/u/"))
+			searchFilter(cont.substring(3), "user");
+		
+		else
+			searchFilter(cont, "both");
+
+	});
+
 	// age button listener
 	$('.ageFetcher').click(function(){
 		let mytd = $(this).closest('td');
@@ -59,6 +80,19 @@ function readyListeners(){
 	});
 }
 
-function getAge(element){
+function searchFilter(query, by){
+	if (by === null){
+		$(".tickerListItem").show();
+		return;
+	}
+
+	$('.tickerListItem').hide();
+
+	if (by == "ticker" || by == "both")
+		$(".tickerSymbol").filter(function(){return $(this).text().toLowerCase() == query.toLowerCase()}).closest(".tickerListItem").show();
+
+	if (by == "user" || by == "both")
+		$(".username").filter(function(){return $(this).text().toLowerCase().includes(query.toLowerCase())}).closest(".tickerListItem").show();
 
 }
+
