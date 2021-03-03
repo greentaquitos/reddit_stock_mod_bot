@@ -50,7 +50,7 @@ class Bot:
 
 			try:
 				for comment in subCommentStream:
-					if comment is None:
+					if comment is None or comment.author.name == BOT_NAME:
 						break
 					self.onSubComment(comment)
 
@@ -64,7 +64,7 @@ class Bot:
 
 			try:
 				for post in subPostStream:
-					if not self.running or post is None:
+					if not self.running or post is None or post.author.name == BOT_NAME:
 						break
 					self.onSubPost(post)
 
