@@ -19,17 +19,19 @@ def getAge(name):
 
 def getUsers():
 	con = sqlite3.connect("/var/www/bot/database.db")
-	mentions = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC").fetchall()
+	con.row_factory = sqlite3.Row
+	mentions = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC")
 	users = []
 	# string indices failed
 	for m in mentions:
 		if not any(m['user'] == u['name'] for u in users):
-			users.append({'name':m['user'], 'mentions':[]})
+			users.append({'name':m['user'], 'mentions':[], 'mention_count':0})
 		u = [u for u in users if u['name'] == m['user']][0]
 
 		ago = timeago.format(round(m[4]/1000), datetime.datetime.now())
 
 		u['mentions'].append({'ticker':m['ticker'], 'time':ago, 'rawtime':m['time_created'], 'blacklisted':m['blacklisted'], 'tagged':m['tagged'], 'count':m['counter']})
+		u['mention_count'] += m['counter']
 
 	return users
 

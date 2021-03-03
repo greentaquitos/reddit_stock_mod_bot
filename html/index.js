@@ -12,11 +12,12 @@ function buildList(){
 
 	$.getJSON("api.py", function(data){
 
-		console.log(data);
+		// console.log(data);
 		//data = $.parseJSON(data);
 
+		// to sort by recency just remove this
 		data.sort(function(a,b){
-			return a['mentions'].length > b['mentions'].length ? -1 : 1;
+			return a['mention_count'] > b['mention_count'] ? -1 : 1;
 		});
 		
 		html = "<div class='table-responsive'><table id='main-table' class='table'>";
@@ -28,9 +29,9 @@ function buildList(){
 			});
 			for (var j = 0; j < data[i]['mentions'].length; j++){
 				count = data[i]['mentions'][j]['count'] > 1 ? " x"+data[i]['mentions'][j]['count'] : "";
-				tickers += "<span class='commaMe'><span title='"+data[i]['mentions'][j]['time']+"' class='tickerSymbol'>"+data[i]['mentions'][j]['ticker']+"</span>"+count+"</span>";
+				tickers += " <span class='commaMe'><span title='"+data[i]['mentions'][j]['time']+"' class='tickerSymbol'>"+data[i]['mentions'][j]['ticker']+"</span>"+count+"</span>";
 			}
-			html += "<tr class='tickerListItem'><td><a href='https://reddit.com/u/"+data[i]['name']+"' class='username'>"+data[i]['name']+"</a></td><td>"+data[i]['mentions'].length+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data[i]['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
+			html += "<tr class='tickerListItem'><td><a href='https://reddit.com/u/"+data[i]['name']+"' class='username'>"+data[i]['name']+"</a></td><td>"+data[i]['mention_count']+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data[i]['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
 		}
 		html += "</tbody></table></div>";
 
