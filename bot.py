@@ -166,7 +166,7 @@ class Bot:
 			tickers.update(self.con.execute("SELECT symbol FROM tickers WHERE name = ? LIMIT 1", [tn]).fetchone())
 
 		# make them objs w/ tag info
-		tickers = [{'ticker':x, 'is_over':0, 'is_crypto':0, 'was_tagged':(1 if x in tagged_content else 0)} for x in tickers]
+		tickers = [{'ticker':x, 'is_over':0, 'is_crypto':0, 'was_tagged':(1 if x in tagged_content else 0)} for x in set(tickers)]
 
 		return tickers
 
