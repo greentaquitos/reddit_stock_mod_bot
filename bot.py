@@ -95,7 +95,7 @@ class Bot:
 
 	def engageWith(self, post, tickers):
 		# check for flair
-		if not hasattr(post,'link_flair_template_id') or post.link_flair_template_id != FLAIR_TO_ENGAGE:
+		if not hasattr(post,'link_flair_template_id') or post.link_flair_template_id != FLAIR_TO_ENGAGE or len(FLAIR_TO_ENGAGE) < 1:
 			return
 		self.log("yes this flair")
 		
@@ -106,12 +106,17 @@ class Bot:
 
 		responses = []
 
-		if len(tickers) > 0:
+		if len(tickers) > 0 and len(POSTER_INFO_TEMPLATE_THESE_TICKERS) > 0:
 			responses.append(POSTER_INFO_TEMPLATE_THESE_TICKERS.format(tickers))
-		if not table == None:
+		if not table == None and len(POSTER_INFO_TEMPLATE_OTHER_TICKERS) > 0:
 			responses.append(POSTER_INFO_TEMPLATE_OTHER_TICKERS.format(post.author.name, table))
-		responses.append(POSTER_INFO_TEMPLATE.format(post.author.name, ago, post.author.comment_karma, post.author.link_karma))
-		responses.append(BOT_SIGNATURE)
+		if len(POSTER_INFO_TEMPLATE) > 0:
+			responses.append(POSTER_INFO_TEMPLATE.format(post.author.name, ago, post.author.comment_karma, post.author.link_karma))
+		if len(BOT_SIGNATURE) > 0:
+			responses.append(BOT_SIGNATURE)
+
+		if len(responses) < 1:
+			return
 
 		response = '\n\n'.join(responses)
 
