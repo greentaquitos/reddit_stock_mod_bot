@@ -239,7 +239,7 @@ class Bot:
 
 		tickers = self.con.execute("SELECT symbol,name FROM tickers WHERE symbol NOT LIKE '%.%' AND symbol IS NOT NULL AND name IS NOT NULL AND symbol != '' and name != ''").fetchall()
 		self.tickers = set([t[0] for t in tickers])
-		self.ticker_names = set([t[1] for t in tickers if str(t[1]).upper() not in self.words])
+		self.ticker_names = set([t[1] for t in tickers if str(t[1]).upper() not in self.words and len(str(t[1])) > 4])
 
 
 	def initReddit(self):
