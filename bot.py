@@ -8,21 +8,24 @@ import prawcore
 import traceback
 import requests
 import re
+import timeago
+import datetime
 
 from config import *
 
 class Bot:
 
 	def __init__(self,debug=False):
+		# run config
 		self.running = True
-		self.tickersFound = set()
-		self.startTime = time.time()
-		self.lastTallyReport = time.time()
 		self.debug = debug
+
+		# track error handling
 		self.lastErrorNotif = 0
 		self.lastErrorDelay = 0
 		self.lastResetTime = 0
 
+		# init data
 		self.initWords()
 		self.initdb()
 
@@ -77,27 +80,64 @@ class Bot:
 		b = comment.body[:40]+'..' if len(comment.body) > 40 else comment.body
 		self.log("c "+comment.id+": "+ascii(b))
 
-		tickers = self.tickerTest(comment.body)
-
-		if len(tickers) > 0:
-			self.log("ticker: "+' '.join([t['ticker'] for t in tickers]))
-			self.saveTickerMentions(comment.author.name, tickers)
-			self.log('-')
-
+		tickers = self.getTickersFromString(comment.body)
+		self.saveTickerMentions(comment.author.name, tickers)
+		
 
 	def onSubPost(self, post):
 		b = post.title[:40]+'..' if len(post.title) > 40 else post.title
 		self.log("p "+post.id+": "+ascii(b))
 
-		tickers = self.tickerTest(post.title) + self.tickerTest(post.selftext)
+		tickers = self.getTickersFromString(post.title) + self.getTickersFromString(post.selftext)
+		self.engageWith(post, tickers)
+		self.saveTickerMentions(post.author.name, tickers)
+
+
+	def engageWith(self, post, tickers):
+		# check for flair
+		if not hasattr(post,'link_flair_template_id') or post.link_flair_template_id != FLAIR_TO_ENGAGE:
+			return
+		self.log("yes this flair")
+		
+		table = self.makeMentionTable(post.author, tickers)
+
+		tickers = ", ".join(["$"+t['ticker'] for t in tickers])
+		ago = timeago.format(post.author.created_utc, datetime.datetime.now())
+
+		responses = []
 
 		if len(tickers) > 0:
-			self.log("ticker: "+' '.join([t['ticker'] for t in tickers]))
-			self.saveTickerMentions(post.author.name, tickers)
-			self.log('-')
+			responses.append(POSTER_INFO_TEMPLATE_THESE_TICKERS.format(tickers))
+		if not table == None:
+			responses.append(POSTER_INFO_TEMPLATE_OTHER_TICKERS.format(post.author.name, table))
+		responses.append(POSTER_INFO_TEMPLATE.format(post.author.name, ago, post.author.comment_karma, post.author.link_karma))
+		responses.append(BOT_SIGNATURE)
+
+		response = '\n\n'.join(responses)
+
+		# reply + sticky
+		sticky = post.reply(response)
+		sticky.mod.distinguish(how="yes",sticky=True)
 
 
-	def tickerTest(self, content):
+	def makeMentionTable(self, author, tickers):
+		mentions = self.con.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions WHERE user = ? GROUP BY ticker ORDER BY counter DESC", [author.name]).fetchall()
+
+		table = ['||','|:-','**ticker**','**mentions**']
+		for mention in mentions:
+			table[0] += '|'
+			table[1] += '|:-'
+			m0 = "|**"+mention[0]+"**" if any(t['ticker'] == mention[0] for t in tickers) else '|'+mention[0]
+			m1 = '|**'+str(mention[1])+'**' if any(t['ticker'] == mention[0] for t in tickers) else '|'+str(mention[1])
+			table[2] += m0
+			table[3] += m1
+		table = "\n".join(table) if len(mentions) > 0 else None
+		
+		return table
+
+
+
+	def getTickersFromString(self, content):
 
 		oc = content.upper()
 		content = re.split('[^\w$]+', oc)
@@ -117,20 +157,8 @@ class Bot:
 
 		# plus symbols of mentioned ticker names that aren't common words
 		ticker_names = [x for x in self.ticker_names if str(x).upper() in oc and len(str(x)) > 0]
-		if len(ticker_names) > 0:
-			self.log("ticker names: "+", ".join(ticker_names))
 		for tn in ticker_names:
 			tickers.update(self.con.execute("SELECT symbol FROM tickers WHERE name = ? LIMIT 1", [tn]).fetchone())
-
-		self.tickersFound.update(tickers)
-
-		if time.time() - self.lastTallyReport > 60:
-			self.lastTallyReport = time.time()
-			self.log("=====")
-			self.log("TALLY REPORT: ")
-			self.log("count: "+str(len(self.tickersFound)))
-			self.log("tickers: ")
-			self.log(self.tickersFound)
 
 		# make them objs w/ tag info
 		tickers = [{'ticker':x, 'is_over':0, 'is_crypto':0, 'was_tagged':(1 if x in tagged_content else 0)} for x in tickers]
@@ -140,10 +168,13 @@ class Bot:
 
 	def saveTickerMentions(self, author, tickers):
 		for ticker in tickers:
-			# todo: this happens beforehand
 			blacklisted = 1 if ticker['is_over'] == 1 or ticker['is_crypto'] == 1 else 0
 			self.con.execute("INSERT INTO ticker_mentions (ticker, user, blacklisted, time_created, tagged) VALUES (?,?,?,?,?)", [ticker['ticker'], author, blacklisted, round(time.time())*1000, ticker['was_tagged']])
-		self.con.commit()
+		if len(tickers) > 0:
+			self.con.commit()
+
+			self.log("tickers: "+' '.join([t['ticker'] for t in tickers]))
+			self.log('-')
 
 
 	def handleRuntimeError(self, error):
@@ -160,6 +191,7 @@ class Bot:
 
 		if isinstance(error, prawcore.exceptions.ServerError):
 			resetStreamUntilFixed()
+
 
 	def resetStreamUntilFixed(self):
 		self.running = False
@@ -203,6 +235,7 @@ class Bot:
 		tickers = self.con.execute("SELECT symbol,name FROM tickers WHERE symbol NOT LIKE '%.%' AND symbol IS NOT NULL AND name IS NOT NULL AND symbol != '' and name != ''").fetchall()
 		self.tickers = set([t[0] for t in tickers])
 		self.ticker_names = set([t[1] for t in tickers if str(t[1]).upper() not in self.words])
+
 
 	def initReddit(self):
 		self.r = praw.Reddit(

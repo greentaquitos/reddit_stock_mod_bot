@@ -19,3 +19,13 @@ USER_AGENT = "subreddit manager for /r/"+SUBREDDIT
 
 # api key from marketstack account
 MARKETSTACK_API_KEY = ""
+
+# reddit post flair to respond with a sticky to
+FLAIR_TO_ENGAGE = ""
+# template of that sticky
+POSTER_INFO_TEMPLATE = ""
+POSTER_INFO_TEMPLATE_OTHER_TICKERS = ""
+POSTER_INFO_TEMPLATE_THESE_TICKERS = ""
+
+# signature to go at the end of bot posts
+BOT_SIGNATURE = ""
