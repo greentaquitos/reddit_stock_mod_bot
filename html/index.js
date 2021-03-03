@@ -12,8 +12,8 @@ function buildList(){
 
 	$.getJSON("api.py", function(data){
 
-		//console.log(data);
-		data = $.parseJSON(data);
+		console.log(data);
+		//data = $.parseJSON(data);
 
 		data.sort(function(a,b){
 			return a['mentions'].length > b['mentions'].length ? -1 : 1;
@@ -26,8 +26,10 @@ function buildList(){
 			data[i]['mentions'].sort(function(a,b){
 				return a['rawtime'] > b['rawtime'] ? -1 : 1;
 			});
-			for (var j = 0; j < data[i]['mentions'].length; j++)
-				tickers += "<span title='"+data[i]['mentions'][j]['time']+"' class='tickerSymbol'>"+data[i]['mentions'][j]['ticker']+"</span>";
+			for (var j = 0; j < data[i]['mentions'].length; j++){
+				count = data[i]['mentions'][j]['count'] > 1 ? " x"+data[i]['mentions'][j]['count'] : "";
+				tickers += "<span class='commaMe'><span title='"+data[i]['mentions'][j]['time']+"' class='tickerSymbol'>"+data[i]['mentions'][j]['ticker']+"</span>"+count+"</span>";
+			}
 			html += "<tr class='tickerListItem'><td><a href='https://reddit.com/u/"+data[i]['name']+"' class='username'>"+data[i]['name']+"</a></td><td>"+data[i]['mentions'].length+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data[i]['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
 		}
 		html += "</tbody></table></div>";

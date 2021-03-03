@@ -2,10 +2,10 @@ body {
   padding-top: 5rem;
 }
 
-.tickerSymbol:after{
+.commaMe:after{
 	content: ",";
 }
 
-.tickerSymbol:last-child:after{
+.commaMe:last-child:after{
 	content: ""!important;
 }
