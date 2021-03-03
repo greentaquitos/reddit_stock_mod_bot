@@ -88,7 +88,7 @@ class Bot:
 		b = post.title[:40]+'..' if len(post.title) > 40 else post.title
 		self.log("p "+post.id+": "+ascii(b))
 
-		tickers = self.getTickersFromString(post.title) + self.getTickersFromString(post.selftext)
+		tickers = self.getTickersFromString(post.title+' '+post.selftext)
 		self.engageWith(post, tickers)
 		self.saveTickerMentions(post.author.name, tickers)
 
