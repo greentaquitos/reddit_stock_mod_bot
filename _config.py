@@ -21,7 +21,7 @@ USER_AGENT = "subreddit manager for /r/"+SUBREDDIT
 MARKETSTACK_API_KEY = ""
 
 # reddit post flair to respond with a sticky to // leave blank to skip this
-FLAIR_TO_ENGAGE = ""
+# FLAIR_TO_ENGAGE = "" not in use
 # template of that sticky // leave one of these blank to leave it out
 POSTER_INFO_TEMPLATE = ""
 POSTER_INFO_TEMPLATE_OTHER_TICKERS = ""

@@ -95,9 +95,8 @@ class Bot:
 
 	def engageWith(self, post, tickers):
 		# check for flair
-		if not hasattr(post,'link_flair_template_id') or post.link_flair_template_id != FLAIR_TO_ENGAGE or len(FLAIR_TO_ENGAGE) < 1:
-			return
-		self.log("yes this flair")
+		# if not hasattr(post,'link_flair_template_id') or post.link_flair_template_id != FLAIR_TO_ENGAGE or len(FLAIR_TO_ENGAGE) < 1:
+		#	return
 		
 		table = self.makeMentionTable(post.author, tickers)
 
