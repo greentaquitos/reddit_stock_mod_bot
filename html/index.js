@@ -31,7 +31,7 @@ function buildList(){
 				mention = data[i]['mentions'][j];
 				count = mention['count'] > 1 ? " x"+mention['count'] : "";
 				tag = mention['link'] ? "a" : "span";
-				href = mention['link'] ? "href='"+mention['link']+"'" : "";
+				href = mention['link'] ? "href='"+mention['link']+"' target='_blank'" : "";
 				tickers += " <span class='commaMe'><"+tag+" title='"+mention['time']+"' class='tickerSymbol' "+href+">"+mention['ticker']+"</"+tag+">"+count+"</span>";
 			}
 			html += "<tr class='tickerListItem'><td><a href='https://reddit.com/u/"+data[i]['name']+"' class='username'>"+data[i]['name']+"</a></td><td>"+data[i]['mention_count']+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data[i]['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
