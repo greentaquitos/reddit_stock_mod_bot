@@ -28,11 +28,11 @@ class Bot:
 		# init data
 		self.initWords()
 		self.initdb()
+		self.initReddit()
 
 		if debug:
 			return
 
-		self.initReddit()
 		self.run()
 
 
@@ -81,7 +81,7 @@ class Bot:
 		self.log("c "+comment.id+": "+ascii(b))
 
 		tickers = self.getTickersFromString(comment.body)
-		self.saveTickerMentions(comment.author.name, tickers)
+		self.saveTickerMentions(comment, tickers)
 		
 
 	def onSubPost(self, post):
@@ -90,7 +90,7 @@ class Bot:
 
 		tickers = self.getTickersFromString(post.title+' '+post.selftext)
 		self.engageWith(post, tickers)
-		self.saveTickerMentions(post.author.name, tickers)
+		self.saveTickerMentions(post, tickers)
 
 
 	def engageWith(self, post, tickers):
@@ -179,10 +179,15 @@ class Bot:
 		return tickers
 
 
-	def saveTickerMentions(self, author, tickers):
+	def saveTickerMentions(self, content, tickers):
 		for ticker in tickers:
+			user = content.author.name
 			blacklisted = 1 if ticker['is_over'] == 1 or ticker['is_crypto'] == 1 else 0
-			self.con.execute("INSERT INTO ticker_mentions (ticker, user, blacklisted, time_created, tagged) VALUES (?,?,?,?,?)", [ticker['ticker'], author, blacklisted, round(time.time())*1000, ticker['was_tagged']])
+			time_created = round(time.time())*1000
+			tagged = ticker['was_tagged']
+			content_type = 'c' if isinstance(content, praw.models.Comment) else 'p'
+			content_id = content.permalink
+			self.con.execute("INSERT INTO ticker_mentions (ticker, user, blacklisted, time_created, tagged, content_type, content_id) VALUES (?,?,?,?,?,?,?)", [ticker['ticker'], user, blacklisted, time_created, tagged, content_type, content_id])
 		if len(tickers) > 0:
 			self.con.commit()
 
@@ -293,7 +298,7 @@ class Bot:
 
 		tables = [
 			"users (name string UNIQUE, account_age int, whitelisted int, time_created int)",
-			"ticker_mentions (ticker string, user string, blacklisted int, tagged int, time_created int)",
+			"ticker_mentions (ticker string, user string, blacklisted int, tagged int, time_created int, content_type string, content_id string)",
 			"bot_actions (type string, user string, note string, time_created int)",
 			"bot_errors (info string, time_created int)",
 			"outside_activity (subreddit string, user string, time_created int)",

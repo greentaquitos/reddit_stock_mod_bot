@@ -29,8 +29,9 @@ def getUsers():
 		u = [u for u in users if u['name'] == m['user']][0]
 
 		ago = timeago.format(round(m[4]/1000), datetime.datetime.now())
+		link = "https://reddit.com/"+m['content_id'] if m['content_id'] else ''
 
-		u['mentions'].append({'ticker':m['ticker'], 'time':ago, 'rawtime':m['time_created'], 'blacklisted':m['blacklisted'], 'tagged':m['tagged'], 'count':m['counter']})
+		u['mentions'].append({'ticker':m['ticker'], 'time':ago, 'rawtime':m['time_created'], 'blacklisted':m['blacklisted'], 'tagged':m['tagged'], 'count':m['counter'], 'link':link})
 		u['mention_count'] += m['counter']
 
 	return users

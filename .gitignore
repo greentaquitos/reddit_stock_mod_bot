@@ -6,3 +6,4 @@ database.db
 .AppleDB/
 .AppleDesktop/
 :2eDS_Store
+backup.sql
