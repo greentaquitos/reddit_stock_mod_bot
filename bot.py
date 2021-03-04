@@ -110,17 +110,17 @@ class Bot:
 
 		if not table == None and len(POSTER_INFO_TEMPLATE_OTHER_TICKERS) > 0:
 			responses.append(POSTER_INFO_TEMPLATE_OTHER_TICKERS.format(post.author.name, table))
-			
+
 		if len(POSTER_INFO_TEMPLATE) > 0:
 			responses.append(POSTER_INFO_TEMPLATE.format(post.author.name, ago, post.author.comment_karma, post.author.link_karma))
 		
 		if len(responses) < 1:
 			return
 
-		if len(POSTER_INFO_TEMPLATE_THESE_TICKERS) > 0 or len(POSTER_INFO_TEMPLATE_OTHER_TICKERS) > 0 or len(BOT_SIGNATURE) > 0:
+		if len(tickers) > 0 or not table == None or len(BOT_SIGNATURE) > 0:
 			responses.append('-----')
 
-		if len(POSTER_INFO_TEMPLATE_THESE_TICKERS) > 0 or len(POSTER_INFO_TEMPLATE_OTHER_TICKERS) > 0:
+		if len(tickers) > 0 or not table == None:
 			responses.append(POSTER_INFO_TEMPLATE_MENTIONS)
 
 		if len(BOT_SIGNATURE) > 0:
