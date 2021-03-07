@@ -208,7 +208,7 @@ class Bot:
 			self.lastErrorNotif = time.time()
 
 		if isinstance(error, prawcore.exceptions.ServerError):
-			resetStreamUntilFixed()
+			self.resetStreamUntilFixed()
 
 
 	def resetStreamUntilFixed(self):
