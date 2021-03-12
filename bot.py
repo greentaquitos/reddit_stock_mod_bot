@@ -262,12 +262,16 @@ class Bot:
 			self.lastErrorDelay = delay = 2
 		elif self.lastErrorDelay < 128:
 			self.lastErrorDelay = delay = self.lastErrorDelay*2
+		else:
+			delay = self.lastErrorDelay
 
 		self.lastResetTime = time.time()
 
-		print("Server Error: retrying in "+str(delay))
+		self.log("Server Error: retrying in "+str(delay))
 		time.sleep(delay)
-		print("retrying")
+		self.log("retrying")
+		self.running = True
+		self.initReddit()
 		self.run()
 
 
