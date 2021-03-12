@@ -12,7 +12,12 @@ function buildList(){
 
 	$.getJSON("api.py", function(data){
 
-		// console.log(data);
+		//console.log(data);
+		if (data.hasOwnProperty('error') && data['error'] == "database locked"){
+			$('main').html("error fetching data; refresh to try again");
+			return;
+		}
+
 		//data = $.parseJSON(data);
 
 		// to sort by recency just remove this
@@ -47,6 +52,10 @@ function buildList(){
 
 function getLastSeen(){
 	$.getJSON("api.py?lastSeen=1", function(data){
+		if (data == "database is locked"){
+			$('#lastSeen').html("error fetching data; refresh to try again");
+			return;
+		}
 		$('#lastSeen').html("last mention logged "+data['lastSeen']);
 	});
 }

@@ -17,29 +17,42 @@ def getAge(name):
 	return {'created':ago}
 
 
-def getUsers():
-	con = sqlite3.connect("/var/www/bot/database.db")
-	con.row_factory = sqlite3.Row
-	mentions = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC")
-	users = []
-	# string indices failed
-	for m in mentions:
-		if not any(m['user'] == u['name'] for u in users):
-			users.append({'name':m['user'], 'mentions':[], 'mention_count':0})
-		u = [u for u in users if u['name'] == m['user']][0]
+def getUsers(retries):
+	try:
+		con = sqlite3.connect("/var/www/bot/database.db")
+		con.row_factory = sqlite3.Row
+		mentions = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC")
+		users = []
+		# string indices failed
+		for m in mentions:
+			if not any(m['user'] == u['name'] for u in users):
+				users.append({'name':m['user'], 'mentions':[], 'mention_count':0})
+			u = [u for u in users if u['name'] == m['user']][0]
 
-		ago = timeago.format(round(m[4]/1000), datetime.datetime.now())
-		link = "https://reddit.com/"+m['content_id'] if m['content_id'] else ''
+			ago = timeago.format(round(m[4]/1000), datetime.datetime.now())
+			link = "https://reddit.com/"+m['content_id'] if m['content_id'] else ''
 
-		u['mentions'].append({'ticker':m['ticker'], 'time':ago, 'rawtime':m['time_created'], 'blacklisted':m['blacklisted'], 'tagged':m['tagged'], 'count':m['counter'], 'link':link})
-		u['mention_count'] += m['counter']
+			u['mentions'].append({'ticker':m['ticker'], 'time':ago, 'rawtime':m['time_created'], 'blacklisted':m['blacklisted'], 'tagged':m['tagged'], 'count':m['counter'], 'link':link})
+			u['mention_count'] += m['counter']
+
+		mentions.close()
+
+	except sqlite3.OperationalError as e:
+		if retries > 2:
+			return {'error':'database locked'}
+		else:
+			retries += 1
+			time.sleep(3)
+			return getUsers(retries)
 
 	return users
 
 
 def getLastSeen():
 	con = sqlite3.connect("/var/www/bot/database.db")
-	lastSeen = con.execute("SELECT time_created FROM ticker_mentions ORDER BY time_created DESC LIMIT 1").fetchone()[0]
+	cur = con.execute("SELECT time_created FROM ticker_mentions ORDER BY time_created DESC LIMIT 1")
+	lastSeen = cur.fetchone()[0]
+	cur.close()
 	ago = timeago.format(round(lastSeen/1000), datetime.datetime.now())
 
 	return {'lastSeen':ago}
@@ -50,6 +63,7 @@ print()
 import json
 import timeago
 import datetime
+import time
 
 try:
 	import cgi
@@ -72,7 +86,7 @@ try:
 
 	else:
 		import sqlite3
-		output = getUsers()
+		output = getUsers(0)
 
 except Exception as e:
 	output = str(e)

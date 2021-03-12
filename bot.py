@@ -162,7 +162,9 @@ class Bot:
 
 
 	def makeMentionTable(self, author, tickers):
-		mentions = self.con.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions WHERE user = ? GROUP BY ticker ORDER BY counter DESC", [author.name]).fetchall()
+		cur = self.con.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions WHERE user = ? GROUP BY ticker ORDER BY counter DESC", [author.name])
+		mentions = cur.fetchall()
+		cur.close()
 
 		table = ['||','|:-','**ticker**','**mentions**']
 		for mention in mentions:
@@ -199,7 +201,11 @@ class Bot:
 		# plus symbols of mentioned ticker names that aren't common words
 		ticker_names = [x for x in self.ticker_names if str(x).upper() in oc and len(str(x)) > 0]
 		for tn in ticker_names:
-			tickers.update(self.con.execute("SELECT symbol FROM tickers WHERE name = ? LIMIT 1", [tn]).fetchone())
+			cur = self.con.execute("SELECT symbol FROM tickers WHERE name = ? LIMIT 1", [tn])
+			t = cur.fetchone()
+			cur.close()
+
+			tickers.update(t)
 
 		# make them objs w/ tag info
 		tickers = [{'ticker':x, 'is_over':0, 'is_crypto':0, 'was_tagged':(1 if x in tagged_content else 0)} for x in set(tickers)]
@@ -208,6 +214,10 @@ class Bot:
 
 
 	def saveTickerMentions(self, content, tickers):
+		if len(tickers) < 1:
+			return
+
+		cur = self.con.cursor()
 		for ticker in tickers:
 			user = content.author.name
 			blacklisted = 1 if ticker['is_over'] == 1 or ticker['is_crypto'] == 1 else 0
@@ -215,28 +225,34 @@ class Bot:
 			tagged = ticker['was_tagged']
 			content_type = 'c' if isinstance(content, praw.models.Comment) else 'p'
 			content_id = content.permalink
-			self.con.execute("INSERT INTO ticker_mentions (ticker, user, blacklisted, time_created, tagged, content_type, content_id) VALUES (?,?,?,?,?,?,?)", [ticker['ticker'], user, blacklisted, time_created, tagged, content_type, content_id])
-		if len(tickers) > 0:
-			self.con.commit()
+			cur.execute("INSERT INTO ticker_mentions (ticker, user, blacklisted, time_created, tagged, content_type, content_id) VALUES (?,?,?,?,?,?,?)", [ticker['ticker'], user, blacklisted, time_created, tagged, content_type, content_id])
 
-			self.log("tickers: "+' '.join([t['ticker'] for t in tickers]))
-			self.log('-')
+		self.con.commit()
+		cur.close()
+
+		self.log("tickers: "+' '.join([t['ticker'] for t in tickers]))
+		self.log('-')
 
 
 	def handleRuntimeError(self, error):
 		infostring = str(type(error)) + ': ' + str(error)
 
-		self.con.execute("INSERT INTO bot_errors (info, time_created) VALUES (?, ?)", [infostring, round(time.time()*1000)])
-		self.con.commit()
+		if not isinstance(error, sqlite3.OperationalError):
+			self.saveError(infostring)
 
 		self.log(traceback.format_exc())
 
 		if time.time() - self.lastErrorNotif > 1800:
 			self.notifyError(infostring)
-			self.lastErrorNotif = time.time()
 
 		if isinstance(error, prawcore.exceptions.ServerError):
 			self.resetStreamUntilFixed()
+
+
+	def saveError(self, infostring):
+		cur = self.con.execute("INSERT INTO bot_errors (info, time_created) VALUES (?, ?)", [infostring, round(time.time()*1000)])
+		self.con.commit()
+		cur.close()
 
 
 	def resetStreamUntilFixed(self):
@@ -264,12 +280,15 @@ class Bot:
 		except Exception as e:
 			self.log("ERROR NOTIFY FAILED")
 
+		self.lastErrorNotif = time.time()
+
 
 	def initdb(self):
 		con = self.con = sqlite3.connect("database.db")
 
 		try:
-			con.execute("SELECT * FROM test_table LIMIT 1")
+			cur = con.execute("SELECT * FROM test_table LIMIT 1")
+			cur.close()
 		except sqlite3.OperationalError as e:
 			if str(e).startswith("no such table"):
 				self.createdb()
@@ -278,7 +297,10 @@ class Bot:
 				self.log("Error with initdb: "+str(e))
 				self.running = False
 
-		tickers = self.con.execute("SELECT symbol,name FROM tickers WHERE symbol NOT LIKE '%.%' AND symbol IS NOT NULL AND name IS NOT NULL AND symbol != '' and name != ''").fetchall()
+		cur = self.con.execute("SELECT symbol,name FROM tickers WHERE symbol NOT LIKE '%.%' AND symbol IS NOT NULL AND name IS NOT NULL AND symbol != '' and name != ''")
+		tickers = cur.fetchall()
+		cur.close()
+
 		self.tickers = set([t[0] for t in tickers])
 		self.ticker_names = set([t[1] for t in tickers if str(t[1]).upper() not in self.words and len(str(t[1])) > 4])
 
@@ -305,6 +327,9 @@ class Bot:
 		start_time = round(time.time()*1000)
 		total = 1001
 		i = 0
+
+		cur = self.con.cursor()
+
 		while 1000*i < int(total):
 			p = {"access_key": MARKETSTACK_API_KEY, "limit":"1000"}
 			total = rj['pagination']['total'] if i == 1 else total
@@ -312,10 +337,11 @@ class Bot:
 			r = requests.get("http://api.marketstack.com/v1/tickers", params=p)
 			rj = r.json()
 			for ticker in rj['data']:
-				self.con.execute("INSERT OR IGNORE INTO tickers (symbol, name, time_created, is_crypto) VALUES (?,?,?, 0)", [ticker['symbol'],ticker['name'],round(time.time()*1000)])
+				cur.execute("INSERT OR IGNORE INTO tickers (symbol, name, time_created, is_crypto) VALUES (?,?,?, 0)", [ticker['symbol'],ticker['name'],round(time.time()*1000)])
 			i+=1
 
 		self.con.commit()
+		cur.close()
 
 		self.log("built ticker list")
 
