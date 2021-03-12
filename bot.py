@@ -24,6 +24,7 @@ class Bot:
 		self.lastErrorNotif = 0
 		self.lastErrorDelay = 0
 		self.lastResetTime = 0
+		self.actionQueue = []
 
 		# init data
 		self.initWords()
@@ -71,7 +72,20 @@ class Bot:
 			except Exception as e:
 				self.handleRuntimeError(e)
 
-			self.log('=== END OF POSTS ===')	
+			self.log('=== END OF POSTS ===')
+
+			try:
+				for item in self.actionQueue[:]:
+					if self.running == False or time.time() - item['time'] < 0:
+						break
+					self.actionQueue.remove(item)
+					if item['action'] == 'engageWith':
+						self.engageWith(item['args'][0], item['args'][1])
+	
+			except Exception as e:
+				self.handleRuntimeError(e)
+
+			self.log('=== END OF QUEUE ===' + str(len(self.actionQueue)))
 
 		self.log("running stopped!")
 
@@ -97,7 +111,21 @@ class Bot:
 		# check for flair
 		# if not hasattr(post,'link_flair_template_id') or post.link_flair_template_id != FLAIR_TO_ENGAGE or len(FLAIR_TO_ENGAGE) < 1:
 		#	return
-		
+
+		# wait a minute to respond to mod posts to see if they get distinguished / stickied
+		if SUBREDDIT in post.author.moderated():
+			if time.time() - post.created_utc < 60:
+				self.log("delaying post "+post.id)
+				self.actionQueue.append({'action':'engageWith','args':[post, tickers],'time':time.time()+60})
+				return
+			else:
+				self.log("came back to post "+post.id)
+				post = self.r.submission(post.id)
+
+		# don't respond to distinguished / sticked posts
+		if post.distinguished or post.stickied:
+			return				
+
 		table = self.makeMentionTable(post.author, tickers)
 
 		tickers = ", ".join(["$"+t['ticker'] for t in tickers])
