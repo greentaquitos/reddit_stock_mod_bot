@@ -10,12 +10,18 @@ import requests
 import re
 import timeago
 import datetime
+import logging
 
 from config import *
 
 class Bot:
 
 	def __init__(self,debug=False):
+		# set up logging
+		logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %I:%M:%S %p', level=logging.INFO)
+		if debug:
+			logging.basicConfig(level=logging.DEBUG)
+		
 		# run config
 		self.running = True
 		self.debug = debug
@@ -37,12 +43,8 @@ class Bot:
 		self.run()
 
 
-	def log(self, content):
-		print(content)
-
-
 	def run (self):
-		self.log("running...")
+		logging.debug("running...")
 
 		subCommentStream = self.r.subreddit(SUBREDDIT).stream.comments(skip_existing=True,pause_after=-1)
 		subPostStream = self.r.subreddit(SUBREDDIT).stream.submissions(skip_existing=True,pause_after=-1)
@@ -58,7 +60,7 @@ class Bot:
 			except Exception as e:
 				self.handleRuntimeError(e)
 
-			self.log('=== END OF COMMENTS ===')
+			logging.debug('=== END OF COMMENTS ===')
 
 			if not self.running:
 				break
@@ -72,7 +74,7 @@ class Bot:
 			except Exception as e:
 				self.handleRuntimeError(e)
 
-			self.log('=== END OF POSTS ===')
+			logging.debug('=== END OF POSTS ===')
 
 			try:
 				for item in self.actionQueue[:]:
@@ -85,14 +87,14 @@ class Bot:
 			except Exception as e:
 				self.handleRuntimeError(e)
 
-			self.log('=== END OF QUEUE ===' + str(len(self.actionQueue)))
+			logging.debug('=== END OF QUEUE === ' + str(len(self.actionQueue)))
 
-		self.log("running stopped!")
+		logging.warning("running stopped!")
 
 
 	def onSubComment(self, comment):
 		b = comment.body[:40]+'..' if len(comment.body) > 40 else comment.body
-		self.log("c "+comment.id+": "+ascii(b))
+		logging.info("c "+comment.id+": "+ascii(b))
 
 		tickers = self.getTickersFromString(comment.body)
 		self.saveTickerMentions(comment, tickers)
@@ -100,7 +102,7 @@ class Bot:
 
 	def onSubPost(self, post):
 		b = post.title[:40]+'..' if len(post.title) > 40 else post.title
-		self.log("p "+post.id+": "+ascii(b))
+		logging.info("p "+post.id+": "+ascii(b))
 
 		tickers = self.getTickersFromString(post.title+' '+post.selftext)
 		self.engageWith(post, tickers)
@@ -115,11 +117,11 @@ class Bot:
 		# wait a minute to respond to mod posts to see if they get distinguished / stickied
 		if SUBREDDIT in post.author.moderated():
 			if time.time() - post.created_utc < 60:
-				self.log("delaying post "+post.id)
+				logging.info("delaying post "+post.id)
 				self.actionQueue.append({'action':'engageWith','args':[post, tickers],'time':time.time()+60})
 				return
 			else:
-				self.log("came back to post "+post.id)
+				logging.info("came back to post "+post.id)
 				post = self.r.submission(post.id)
 
 		# don't respond to distinguished / sticked posts
@@ -230,8 +232,8 @@ class Bot:
 		self.con.commit()
 		cur.close()
 
-		self.log("tickers: "+' '.join([t['ticker'] for t in tickers]))
-		self.log('-')
+		logging.info("tickers: "+' '.join([t['ticker'] for t in tickers]))
+		logging.info('-')
 
 
 	def handleRuntimeError(self, error):
@@ -240,7 +242,7 @@ class Bot:
 		if not isinstance(error, sqlite3.OperationalError):
 			self.saveError(infostring)
 
-		self.log(traceback.format_exc())
+		logging.error(traceback.format_exc())
 
 		if time.time() - self.lastErrorNotif > 1800:
 			self.notifyError(infostring)
@@ -267,9 +269,9 @@ class Bot:
 
 		self.lastResetTime = time.time()
 
-		self.log("Server Error: retrying in "+str(delay))
+		logging.warning("Server Error: retrying in "+str(delay))
 		time.sleep(delay)
-		self.log("retrying")
+		logging.warning("retrying")
 		self.running = True
 		self.initReddit()
 		self.run()
@@ -277,12 +279,12 @@ class Bot:
 
 	def notifyError(self, error):
 		if NOTIFY == '':
-			self.log("NOTIFY not set")
+			logging.warning("NOTIFY not set")
 			return
 		try:
 			self.r.redditor(NOTIFY).message("encountered an error",str(error))
 		except Exception as e:
-			self.log("ERROR NOTIFY FAILED")
+			logging.error("ERROR NOTIFY FAILED")
 
 		self.lastErrorNotif = time.time()
 
@@ -298,7 +300,7 @@ class Bot:
 				self.createdb()
 				self.updateTickerList()
 			else:
-				self.log("Error with initdb: "+str(e))
+				logging.error("Error with initdb: "+str(e))
 				self.running = False
 
 		cur = self.con.execute("SELECT symbol,name FROM tickers WHERE symbol NOT LIKE '%.%' AND symbol IS NOT NULL AND name IS NOT NULL AND symbol != '' and name != ''")
@@ -317,7 +319,7 @@ class Bot:
 			user_agent = USER_AGENT,
 			username = BOT_NAME
 		)
-		self.log("logged in as "+self.r.user.me().name)
+		logging.info("logged in as "+self.r.user.me().name)
 
 
 	def initWords(self):
@@ -326,7 +328,7 @@ class Bot:
 
 
 	def updateTickerList(self):
-		self.log("updating ticker list (this may take a while)...")
+		logging.info("updating ticker list (this may take a while)...")
 
 		start_time = round(time.time()*1000)
 		total = 1001
@@ -347,11 +349,11 @@ class Bot:
 		self.con.commit()
 		cur.close()
 
-		self.log("built ticker list")
+		logging.info("built ticker list")
 
 
 	def createdb(self):
-		self.log("building database...")
+		logging.info("building database...")
 		con = self.con
 
 		tables = [
@@ -368,7 +370,7 @@ class Bot:
 			try:
 				con.execute("CREATE TABLE IF NOT EXISTS "+t)
 			except Exception as e:
-				self.log("Error with SQL:\n"+t+"\n"+str(e))
+				logging.error("Error with SQL:\n"+t+"\n"+str(e))
 				self.running = False
 				break
 
