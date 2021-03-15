@@ -30,3 +30,6 @@ POSTER_INFO_TEMPLATE_MENTIONS = ""
 
 # signature to go at the end of bot posts // leave blank to skip 
 BOT_SIGNATURE = ""
+
+# template ids of flairs to ignore
+FLAIRS_TO_IGNORE = []

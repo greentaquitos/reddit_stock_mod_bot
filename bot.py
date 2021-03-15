@@ -111,8 +111,8 @@ class Bot:
 
 	def engageWith(self, post, tickers):
 		# check for flair
-		# if not hasattr(post,'link_flair_template_id') or post.link_flair_template_id != FLAIR_TO_ENGAGE or len(FLAIR_TO_ENGAGE) < 1:
-		#	return
+		if hasattr(post,'link_flair_template_id') and post.link_flair_template_id in FLAIRS_TO_IGNORE:
+			return
 
 		# wait a minute to respond to mod posts to see if they get distinguished / stickied
 		if SUBREDDIT in post.author.moderated():
@@ -377,4 +377,4 @@ class Bot:
 		con.commit()
 
 
-b = Bot()
+# b = Bot()
