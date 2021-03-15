@@ -247,7 +247,7 @@ class Bot:
 		if time.time() - self.lastErrorNotif > 1800:
 			self.notifyError(infostring)
 
-		if isinstance(error, prawcore.exceptions.ServerError):
+		if isinstance(error, prawcore.exceptions.ServerError) or isinstance(error, prawcore.exceptions.RequestException):
 			self.resetStreamUntilFixed()
 
 
