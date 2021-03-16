@@ -1,20 +1,26 @@
 
+userData = null;
+tickerData = null;
+
 $(document).ready(function(){
 
-	buildList();
 	getLastSeen();
+	readyListeners("nav");
+	setHashHistory();
 
 });
 
-function buildList(){
+function buildUserList(){
 
-	$('main').html('loading...');
+	console.log('bUL');
 
-	$.getJSON("api.py", function(data){
+	userData = "loading";
 
-		//console.log(data);
+	$.getJSON("api.py?mode=users", function(data){
+
+		console.log(data);
 		if (data.hasOwnProperty('error') && data['error'] == "database locked"){
-			$('main').html("error fetching data; refresh to try again");
+			$('#users .container').html("error fetching data; refresh to try again");
 			return;
 		}
 
@@ -25,7 +31,7 @@ function buildList(){
 			return a['mention_count'] > b['mention_count'] ? -1 : 1;
 		});*/
 		
-		html = "<div class='table-responsive'><table id='main-table' class='table'>";
+		html = "<div class='table-responsive'><table id='users-table' class='table'>";
 		html += "<thead><tr><th scope='col'>User</th><th scope='col'># of Mentions</th><th scope='col'>Acct Created</th><th scope='col'>Tickers</th></tr></thead><tbody>";
 		for(var i = 0; i < data.length; i++){
 			tickers = "";
@@ -39,19 +45,35 @@ function buildList(){
 				href = mention['link'] ? "href='"+mention['link']+"' target='_blank'" : "";
 				tickers += " <span class='commaMe'><"+tag+" title='"+mention['time']+"' class='tickerSymbol' "+href+">"+mention['ticker']+"</"+tag+">"+count+"</span>";
 			}
-			html += "<tr class='tickerListItem'><td><a href='https://reddit.com/u/"+data[i]['name']+"' class='username'>"+data[i]['name']+"</a></td><td>"+data[i]['mention_count']+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data[i]['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
+			html += "<tr class='userListItem'><td><a href='https://reddit.com/u/"+data[i]['name']+"' class='username'>"+data[i]['name']+"</a></td><td>"+data[i]['mention_count']+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data[i]['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
 		}
 		html += "</tbody></table></div>";
 
-		$('main').html(html);
+		$('#users .container').html(html);
 
-		readyListeners();
+		userData = "done";
+		readyListeners("users ready");
 
 	});
 }
 
+function buildTickerList(){
+	console.log('bTL');
+
+	tickerData = "loading";
+
+	$.getJSON("api.py?mode=tickers", function(data){
+
+		// console.log(data);
+
+		printTickerData(data, "mention_count");
+		tickerData = data;
+		readyListeners("tickers ready");
+	});
+}
+
 function getLastSeen(){
-	$.getJSON("api.py?lastSeen=1", function(data){
+	$.getJSON("api.py?mode=lastSeen", function(data){
 		if (data == "database is locked"){
 			$('#lastSeen').html("error fetching data; refresh to try again");
 			return;
@@ -60,54 +82,163 @@ function getLastSeen(){
 	});
 }
 
-function readyListeners(){
+function getWhoMentioned(event){
+	let mytd = $(event.target).closest('td');
+	mytd.html('loading...');
+	name = $(event.target).attr('data-ticker');
+	console.log(name);
+	$.getJSON("api.py?mode=whoMentioned&ticker="+name, function(data){
+		console.log(data);
+		mytd.html('')
+		usersRow = "<tr class='tickerListItem'><td><a class='tickerName' style='display:none'>"+name+"</a></td><td colspan='6'>";
+		for (var i=0; i<data.length; i++){
+			count = data[i]['counter'] > 1 ? " x"+data[i]['counter'] : "";
+			usersRow += "<span class='commaMe'><a title='"+data[i]['ago']+"' class='userTag' href='https://reddit.com/u/"+data[i]['user']+"' target='_blank'>"+data[i]['user']+"</a>"+count+"</span> ";
+		}
+		usersRow += "</td></tr>";
+		mytd.closest('tr').after(usersRow);
+	});
+}
 
-	// search listener
-	$('#searchbox').prop('disabled',false).on('input', function(){
-		cont = $(this).val();
 
-		if (cont.length < 2)
-			searchFilter(null, null);
-
-		else if (cont.startsWith("$"))
-			searchFilter(cont.substring(1), "ticker");
-
-		else if (cont.startsWith("u/"))
-			searchFilter(cont.substring(2), "user");
-
-		else if (cont.startsWith("/u/"))
-			searchFilter(cont.substring(3), "user");
-		
-		else
-			searchFilter(cont, "both");
-
+function printTickerData(data, by){
+	data.sort(function(a,b){
+		if (by == 'ticker')
+			return a[by] <= b[by] ? -1 : 1;
+		return a[by] > b[by] ? -1 : 1;
 	});
 
-	// age button listener
-	$('.ageFetcher').click(function(){
-		let mytd = $(this).closest('td');
-		mytd.html('loading...');
-		name = $(this).attr('data-user');
-		$.getJSON("api.py?age="+name, function(data){
-			//console.log(data);
-			mytd.html(data['created']);
-		});
+	if (data.hasOwnProperty('error') && data['error'] == "database locked"){
+		$('#users .container').html("error fetching data; refresh to try again");
+		return;
+	}
+	
+	html = "<div class='table-responsive'><table id='tickers-table' class='table'>";
+	html += "<thead><tr><th scope='col' data-by='ticker'>Ticker</th><th scope='col' data-by='24h'>24h</th><th scope='col' data-by='7d'>7d</th><th scope='col' data-by='14d'>14d</th><th scope='col' data-by='30d'>30d</th><th scope='col' data-by='mention_count'>total</th><th scope='col'></th></tr></thead><tbody>";
+	for(var i = 0; i < data.length; i++){
+		html += "<tr class='tickerListItem'><td class='tickerName'>"+data[i]['ticker']+"</td><td>"+data[i]['24h']+"</td><td>"+data[i]['7d']+"</td><td>"+data[i]['14d']+"</td><td>"+data[i]['30d']+"</td><td>"+data[i]['mention_count']+"</td><td><button class='btn btn-secondary btn-sm whoFetcher' data-ticker='"+data[i]['ticker']+"'>Who?</button></td></tr>";
+	}
+	html += "</tbody></table></div>";
+
+	$('#tickers .container').html(html);
+}
+
+function readyListeners(phase){
+
+	if(phase == "nav"){
+		$('#pbTabs a').unbind().click(navigateTab);
+		$('#pbTabs a[href="'+location.hash+'"]').tab('show');
+	}
+
+	if(phase == "users ready"){
+		// search listener
+		if (tickerData != "loading")
+			$('#searchbox').prop('disabled',false).unbind().on('input', filterFor);
+		// age button listener
+		$('.ageFetcher').unbind().click(fetchAge);
+	}
+
+	if(phase == "tickers ready"){
+		// search listener
+		if (userData != "loading")
+			$('#searchbox').prop('disabled',false).unbind().on('input', filterFor);
+		// who button listener
+		$('.whoFetcher').unbind().click(getWhoMentioned);
+		// sort button listener
+		$('#tickers th').unbind().click(sortTickers);
+	}
+}
+
+
+function sortTickers(event){
+	printTickerData(tickerData, $(event.target).attr('data-by'));
+	readyListeners("tickers ready");
+}
+
+
+function filterFor(event){
+	cont = $(event.target).val();
+
+	if (cont.length < 2)
+		searchFilter(null, null);
+
+	else if (cont.startsWith("$"))
+		searchFilter(cont.substring(1), "ticker");
+
+	else if (cont.startsWith("u/"))
+		searchFilter(cont.substring(2), "user");
+
+	else if (cont.startsWith("/u/"))
+		searchFilter(cont.substring(3), "user");
+	
+	else
+		searchFilter(cont, "both");
+}
+
+function fetchAge(event){
+	let mytd = $(event.target).closest('td');
+	mytd.html('loading...');
+	let name = $(event.target).attr('data-user');
+	$.getJSON("api.py?mode=age&user="+name, function(data){
+		console.log(name,data);
+		mytd.html(data['created']);
 	});
 }
 
 function searchFilter(query, by){
 	if (by === null){
-		$(".tickerListItem").show();
+		$(".userListItem").show();
+		$('.tickerListItem').show();
 		return;
 	}
 
+	$('.userListItem').hide();
 	$('.tickerListItem').hide();
 
-	if (by == "ticker" || by == "both")
-		$(".tickerSymbol").filter(function(){return $(this).text().toLowerCase() == query.toLowerCase()}).closest(".tickerListItem").show();
+	if (by == "ticker" || by == "both"){
+		$("#users .tickerSymbol").filter(function(){return $(this).text().toLowerCase() == query.toLowerCase()}).closest(".userListItem").show();
+		$("#tickers .tickerName").filter(function(){return $(this).text().toLowerCase().includes(query.toLowerCase())}).closest(".tickerListItem").show();
+	}
 
 	if (by == "user" || by == "both")
-		$(".username").filter(function(){return $(this).text().toLowerCase().includes(query.toLowerCase())}).closest(".tickerListItem").show();
-
+		$("#users .username").filter(function(){return $(this).text().toLowerCase().includes(query.toLowerCase())}).closest(".userListItem").show();
 }
 
+/// NEW NAVIGATION
+
+function setHashHistory(){
+	// on page load, show the appropriate tab
+	var hash = window.location.hash;
+	if (hash) {
+	    $('#pbTabs a[href="'+hash+'"]').tab('show');
+	    getTab(hash.substring(1,hash.length));
+	} else {
+		getTab('home');
+	}
+	
+	// if history is modified/navigated, show the active tab
+	window.addEventListener("popstate", function(e){
+		var activeTab = $('#pbTabs a[href="'+location.hash+'"]');
+		if (activeTab.length)
+			activeTab.tab('show');
+	});
+}
+
+function navigateTab(e){
+	if(history.pushState)
+		history.pushState(null,null,e.target.hash);
+	else
+		window.location.hash = e.target.hash;
+	getTab(e.target.hash.substring(1,e.target.hash.length));
+}
+
+function getTab(tab){
+	if (tab == 'users' && userData === null){
+		$('#searchbox').prop('disabled', true)
+		buildUserList();
+	}
+	if (tab == 'tickers' && tickerData === null){
+		$('#searchbox').prop('disabled', true)
+		buildTickerList();
+	}
+}

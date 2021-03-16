@@ -9,3 +9,7 @@ body {
 .commaMe:last-child:after{
 	content: ""!important;
 }
+
+#tickers th{
+	cursor:pointer;
+}

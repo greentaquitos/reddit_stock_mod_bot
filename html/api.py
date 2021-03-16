@@ -21,7 +21,11 @@ def getUsers(retries):
 	try:
 		con = sqlite3.connect("/var/www/bot/database.db")
 		con.row_factory = sqlite3.Row
-		mentions = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC")
+		#mentions = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC")
+		cur = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC")
+		mentions = cur.fetchall()
+		cur.close()
+
 		users = []
 		# string indices failed
 		for m in mentions:
@@ -35,7 +39,7 @@ def getUsers(retries):
 			u['mentions'].append({'ticker':m['ticker'], 'time':ago, 'rawtime':m['time_created'], 'blacklisted':m['blacklisted'], 'tagged':m['tagged'], 'count':m['counter'], 'link':link})
 			u['mention_count'] += m['counter']
 
-		mentions.close()
+		# mentions.close()
 
 	except sqlite3.OperationalError as e:
 		if retries > 2:
@@ -58,19 +62,85 @@ def getLastSeen():
 	return {'lastSeen':ago}
 
 
+def getTickers(retries):
+	try:
+		con = sqlite3.connect("/var/www/bot/database.db")
+		cur = con.cursor()
+
+		day = 1000*60*60*24
+		now = round(time.time()*1000)
+		times = {'24h': day, '7d':day*7, '14d':day*14, '30d':day*30}
+
+		mentions = {}
+		for t in times:
+			mentions[t] = cur.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions WHERE time_created > ? GROUP BY ticker ORDER BY counter DESC", [now-times[t]]).fetchall()
+		mentions['mention_count'] = cur.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions GROUP BY ticker ORDER BY counter DESC").fetchall()
+		cur.close()
+
+		tickers = []
+		for m in mentions:
+			for mention in mentions[m]:
+				if not any(t['ticker'] == mention[0] for t in tickers):
+					ticker = {'ticker':mention[0]}
+					for i in times:
+						ticker[i] = ''
+					tickers.append(ticker)
+				t = [tic for tic in tickers if tic['ticker'] == mention[0]][0]
+				t[m] = mention[1]
+
+	except sqlite3.OperationalError as e:
+		if retries > 2:
+			return {'error':'database locked'}
+		else:
+			retries += 1
+			time.sleep(3)
+			return getTickers(retries)
+
+	return tickers
+
+
+def whoMentioned(ticker):
+	try:
+		con = sqlite3.connect("/var/www/bot/database.db")
+		con.row_factory = sqlite3.Row
+		cur = con.cursor()
+
+		data = cur.execute("SELECT user, content_id, COUNT(rowid) as counter, time_created FROM ticker_mentions WHERE ticker = ? GROUP BY user ORDER BY counter DESC", [ticker]).fetchall()
+		cur.close()
+
+		mentions = [{'user':d['user'],'link':d['content_id'],'counter':d['counter'], 'ago':timeago.format(round(d['time_created']/1000), datetime.datetime.now())} for d in data]
+
+	except sqlite3.OperationalError as e:
+		mentions = str(e)
+	
+	return mentions
+
+
 print("Content-Type: application/json;charset=utf-8")
 print()
 import json
 import timeago
 import datetime
 import time
+import traceback
+
+class ArgumentError(Exception):
+	pass
 
 try:
 	import cgi
 	args = cgi.FieldStorage()
 	output = {}
 
-	if 'age' in args:
+	if 'mode' not in args:
+		raise ArgumentError("no mode argument")
+
+	mode = args['mode'].value
+
+	if mode == 'age':
+		if 'user' not in args:
+			raise ArgumentError("no user argument")
+
 		import praw
 		# get config module from parent dir
 		import os,sys,inspect
@@ -78,18 +148,33 @@ try:
 		parent_dir = os.path.dirname(current_dir)
 		sys.path.insert(0, parent_dir) 
 		from config import *
-		output = getAge(args['age'].value)
+		output = getAge(args['user'].value)
 
-	elif 'lastSeen' in args:
+	if mode == 'lastSeen':
 		import sqlite3
 		output = getLastSeen()
 
-	else:
+	if mode == 'users':
 		import sqlite3
 		output = getUsers(0)
 
+	if mode == 'tickers':
+		import sqlite3
+		output = getTickers(0)
+
+	if mode == 'whoMentioned':
+		if 'ticker' not in args:
+			raise ArgumentError("no ticker argument")
+
+		import sqlite3
+		output = whoMentioned(args['ticker'].value)
+
+
 except Exception as e:
-	output = str(e)
+	if 'debug' in args:
+		output = traceback.format_exc()
+	else:
+		output = str(e)
 
 print(json.dumps(output))
 
