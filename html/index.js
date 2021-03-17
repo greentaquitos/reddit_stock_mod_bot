@@ -1,6 +1,7 @@
 
 userData = null;
 tickerData = null;
+cloudsData = null;
 
 $(document).ready(function(){
 
@@ -12,13 +13,13 @@ $(document).ready(function(){
 
 function buildUserList(){
 
-	console.log('bUL');
+	//console.log('bUL');
 
 	userData = "loading";
 
 	$.getJSON("api.py?mode=users", function(data){
 
-		console.log(data);
+		//console.log(data);
 		if (data.hasOwnProperty('error') && data['error'] == "database locked"){
 			$('#users .container').html("error fetching data; refresh to try again");
 			return;
@@ -58,7 +59,7 @@ function buildUserList(){
 }
 
 function buildTickerList(){
-	console.log('bTL');
+	//console.log('bTL');
 
 	tickerData = "loading";
 
@@ -70,6 +71,60 @@ function buildTickerList(){
 		tickerData = data;
 		readyListeners("tickers ready");
 	});
+}
+
+function buildClouds(){
+	console.log('bC')
+
+	if (tickerData === null){
+		tickerData = "loading";
+		$.getJSON("api.py?mode=tickers", function(data){
+			console.log(data);
+			printClouds(data);
+			printTickerData(data, "mention_count");
+			tickerData = data;
+		})
+	} else
+		printClouds(tickerData)
+}
+
+function printClouds(data){
+	$('#clouds .container-fluid').html('');
+
+	cloudsData = {'total':[],'24h':[],'7d':[],'14d':[],'30d':[]}
+
+	for (var i=0; i<data.length; i++){
+		for(var time in data[i]){
+			if (time == 'ticker' || data[i][time] == '')
+				continue
+			tname = time == 'mention_count' ? 'total' : time;
+			weight = data[i][time] == '' ? 0 : data[i][time];
+
+			cloudsData[tname].push({word: data[i]['ticker'], weight: weight});
+		}
+	}
+
+	html = "<div class='card-group'>";
+	for (var time in cloudsData)
+		html += printCloud(time);
+	html += "</div>";
+	$('#clouds .container-fluid').append(html);
+
+	for (var time in cloudsData)
+		$('#wCloud-'+time).jQWCloud({
+			title: time,
+			words: cloudsData[time],
+			padding_left: 1
+		})
+}
+
+function printCloud(title){
+	html = "<div class='card'>"
+	html += "<div class='card-body'>";
+	html += "<h5 class='card-title'>"+title+"</h5>";
+	html += "<div class='wCloud' id='wCloud-"+title+"' style='height:400px;line-height:400px;'>&nbsp;</div>";
+	html += "</div></div>";
+	return html
 }
 
 function getLastSeen(){
@@ -86,9 +141,9 @@ function getWhoMentioned(event){
 	let mytd = $(event.target).closest('td');
 	mytd.html('loading...');
 	name = $(event.target).attr('data-ticker');
-	console.log(name);
+	//console.log(name);
 	$.getJSON("api.py?mode=whoMentioned&ticker="+name, function(data){
-		console.log(data);
+		//console.log(data);
 		mytd.html('')
 		usersRow = "<tr class='tickerListItem'><td><a class='tickerName' style='display:none'>"+name+"</a></td><td colspan='6'>";
 		for (var i=0; i<data.length; i++){
@@ -180,7 +235,7 @@ function fetchAge(event){
 	mytd.html('loading...');
 	let name = $(event.target).attr('data-user');
 	$.getJSON("api.py?mode=age&user="+name, function(data){
-		console.log(name,data);
+		//console.log(name,data);
 		mytd.html(data['created']);
 	});
 }
@@ -240,5 +295,8 @@ function getTab(tab){
 	if (tab == 'tickers' && tickerData === null){
 		$('#searchbox').prop('disabled', true)
 		buildTickerList();
+	}
+	if (tab == 'clouds' && cloudsData === null){
+		buildClouds();
 	}
 }

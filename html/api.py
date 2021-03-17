@@ -1,6 +1,7 @@
 #!/usr/local/bin/python3
 # -*- coding: utf-8 -*-
 
+PAGE_SIZE = 200;
 
 def getAge(name):
 	r = praw.Reddit(
@@ -22,7 +23,7 @@ def getUsers(retries):
 		con = sqlite3.connect("/var/www/bot/database.db")
 		con.row_factory = sqlite3.Row
 		#mentions = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC")
-		cur = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC")
+		cur = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC LIMIT ?", [PAGE_SIZE])
 		mentions = cur.fetchall()
 		cur.close()
 
@@ -73,8 +74,8 @@ def getTickers(retries):
 
 		mentions = {}
 		for t in times:
-			mentions[t] = cur.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions WHERE time_created > ? GROUP BY ticker ORDER BY counter DESC", [now-times[t]]).fetchall()
-		mentions['mention_count'] = cur.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions GROUP BY ticker ORDER BY counter DESC").fetchall()
+			mentions[t] = cur.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions WHERE time_created > ? GROUP BY ticker ORDER BY counter DESC LIMIT ?", [now-times[t], PAGE_SIZE]).fetchall()
+		mentions['mention_count'] = cur.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions GROUP BY ticker ORDER BY counter DESC LIMIT ?", [PAGE_SIZE]).fetchall()
 		cur.close()
 
 		tickers = []
