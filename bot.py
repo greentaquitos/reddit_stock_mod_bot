@@ -164,7 +164,7 @@ class Bot:
 
 
 	def makeMentionTable(self, author, tickers):
-		cur = self.con.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions WHERE user = ? GROUP BY ticker ORDER BY counter DESC", [author.name])
+		cur = self.con.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions WHERE user = ? AND content_type = 'c' GROUP BY ticker ORDER BY counter DESC", [author.name])
 		mentions = cur.fetchall()
 		cur.close()
 
