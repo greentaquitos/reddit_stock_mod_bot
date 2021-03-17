@@ -76,21 +76,21 @@ function buildTickerList(){
 function buildClouds(){
 	console.log('bC')
 
-	if (tickerData === null){
+	if (tickerData === null || tickerData == "loading"){
 		tickerData = "loading";
 		$.getJSON("api.py?mode=tickers", function(data){
 			console.log(data);
-			printClouds(data);
+			formatCloudsData(data);
+			printClouds();
 			printTickerData(data, "mention_count");
+			readyListeners("tickers ready");
 			tickerData = data;
 		})
 	} else
 		printClouds(tickerData)
 }
 
-function printClouds(data){
-	$('#clouds .container-fluid').html('');
-
+function formatCloudsData(data){
 	cloudsData = {'total':[],'24h':[],'7d':[],'14d':[],'30d':[]}
 
 	for (var i=0; i<data.length; i++){
@@ -103,12 +103,23 @@ function printClouds(data){
 			cloudsData[tname].push({word: data[i]['ticker'], weight: weight});
 		}
 	}
+}
+
+function printClouds(){
+
+	if (window.location.hash !== '#clouds'){
+		setTimeout(printClouds, 1000)
+		return
+	}
+
+	data = cloudsData;
+	$('#clouds .container-fluid').html('');
 
 	html = "<div class='card-group'>";
 	for (var time in cloudsData)
 		html += printCloud(time);
 	html += "</div>";
-	$('#clouds .container-fluid').append(html);
+	$('#clouds .container-fluid').html(html);
 
 	for (var time in cloudsData)
 		$('#wCloud-'+time).jQWCloud({
