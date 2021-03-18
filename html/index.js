@@ -2,6 +2,7 @@
 userData = null;
 tickerData = null;
 cloudsData = null;
+mostRecentQuery = null;
 
 $(document).ready(function(){
 
@@ -35,18 +36,7 @@ function buildUserList(){
 		html = "<div class='table-responsive'><table id='users-table' class='table'>";
 		html += "<thead><tr><th scope='col'>User</th><th scope='col'># of Mentions</th><th scope='col'>Acct Created</th><th scope='col'>Tickers</th></tr></thead><tbody>";
 		for(var i = 0; i < data.length; i++){
-			tickers = "";
-			data[i]['mentions'].sort(function(a,b){
-				return a['rawtime'] > b['rawtime'] ? -1 : 1;
-			});
-			for (var j = 0; j < data[i]['mentions'].length; j++){
-				mention = data[i]['mentions'][j];
-				count = mention['count'] > 1 ? " x"+mention['count'] : "";
-				tag = mention['link'] ? "a" : "span";
-				href = mention['link'] ? "href='"+mention['link']+"' target='_blank'" : "";
-				tickers += " <span class='commaMe'><"+tag+" title='"+mention['time']+"' class='tickerSymbol' "+href+">"+mention['ticker']+"</"+tag+">"+count+"</span>";
-			}
-			html += "<tr class='userListItem'><td><a href='https://reddit.com/u/"+data[i]['name']+"' class='username'>"+data[i]['name']+"</a></td><td>"+data[i]['mention_count']+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data[i]['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
+			html += parseUserData(data[i]);
 		}
 		html += "</tbody></table></div>";
 
@@ -56,6 +46,21 @@ function buildUserList(){
 		readyListeners("users ready");
 
 	});
+}
+
+function parseUserData(data){
+	tickers = "";
+	data['mentions'].sort(function(a,b){
+		return a['rawtime'] > b['rawtime'] ? -1 : 1;
+	});
+	for (var j = 0; j < data['mentions'].length; j++){
+		mention = data['mentions'][j];
+		count = mention['count'] > 1 ? " x"+mention['count'] : "";
+		tag = mention['link'] ? "a" : "span";
+		href = mention['link'] ? "href='"+mention['link']+"' target='_blank'" : "";
+		tickers += " <span class='commaMe'><"+tag+" title='"+mention['time']+"' class='tickerSymbol' "+href+">"+mention['ticker']+"</"+tag+">"+count+"</span>";
+	}
+	return "<tr class='userListItem'><td><a href='https://reddit.com/u/"+data['name']+"' class='username'>"+data['name']+"</a></td><td>"+data['mention_count']+"</td><td><button class='btn btn-secondary btn-sm ageFetcher' data-user='"+data['name']+"'>fetch</button></td><td>"+tickers+"</td></tr>";
 }
 
 function buildTickerList(){
@@ -86,8 +91,10 @@ function buildClouds(){
 			readyListeners("tickers ready");
 			tickerData = data;
 		})
-	} else
-		printClouds(tickerData)
+	} else{
+		formatCloudsData(tickerData)
+		setTimeout(printClouds, 500)
+	}
 }
 
 function formatCloudsData(data){
@@ -103,12 +110,17 @@ function formatCloudsData(data){
 			cloudsData[tname].push({word: data[i]['ticker'], weight: weight});
 		}
 	}
+
+	for (var time in cloudsData){
+		cloudsData[time].sort(function(a,b){return a.weight > b.weight ? -1 : 1})
+		cloudsData[time] = cloudsData[time].slice(0,199)
+	}
 }
 
 function printClouds(){
 
-	if (window.location.hash !== '#clouds'){
-		setTimeout(printClouds, 1000)
+	if (window.location.hash && window.location.hash !== '#clouds'){
+		setTimeout(printClouds, 500)
 		return
 	}
 
@@ -121,12 +133,15 @@ function printClouds(){
 	html += "</div>";
 	$('#clouds .container-fluid').html(html);
 
-	for (var time in cloudsData)
+	for (var time in cloudsData){
+		if (!cloudsData[time].length)
+			continue
 		$('#wCloud-'+time).jQWCloud({
 			title: time,
 			words: cloudsData[time],
 			padding_left: 1
 		})
+	}
 }
 
 function printCloud(title){
@@ -231,11 +246,18 @@ function filterFor(event){
 	else if (cont.startsWith("$"))
 		searchFilter(cont.substring(1), "ticker");
 
+	else if (cont.length < 3)
+		searchFilter(null, null);
+
 	else if (cont.startsWith("u/"))
 		searchFilter(cont.substring(2), "user");
 
-	else if (cont.startsWith("/u/"))
-		searchFilter(cont.substring(3), "user");
+	else if (cont.startsWith("/u/")){
+		if (cont.length < 4)
+			searchFilter(null,null)
+		else
+			searchFilter(cont.substring(3), "user");
+	}
 	
 	else
 		searchFilter(cont, "both");
@@ -255,6 +277,7 @@ function searchFilter(query, by){
 	if (by === null){
 		$(".userListItem").show();
 		$('.tickerListItem').show();
+		$('#userSearchInfo').hide();
 		return;
 	}
 
@@ -268,6 +291,29 @@ function searchFilter(query, by){
 
 	if (by == "user" || by == "both")
 		$("#users .username").filter(function(){return $(this).text().toLowerCase().includes(query.toLowerCase())}).closest(".userListItem").show();
+
+	getUserSearch(query, by);
+}
+
+function getUserSearch(query, by){
+	// query db, set most recent query glob, display loading notice on user page
+	$('#userSearchInfo').text("Fetching more data...").show()
+	mostRecentQuery = query;
+
+	$.getJSON("api.py?mode=search-user&by="+by+"&query="+query, function(data){
+		if (mostRecentQuery !== query)
+			return;
+		console.log(data);
+
+		for(var i=0; i<data.length; i++){
+			if ($('.ageFetcher[data-user='+data[i]['name']+']').length > 0)
+				continue;
+			$('#users-table tbody').append(parseUserData(data[i]));
+		}
+
+		readyListeners("users ready");
+		$('#userSearchInfo').hide()
+	});
 }
 
 /// NEW NAVIGATION
@@ -275,11 +321,11 @@ function searchFilter(query, by){
 function setHashHistory(){
 	// on page load, show the appropriate tab
 	var hash = window.location.hash;
-	if (hash) {
+	if (hash && hash != '#') {
 	    $('#pbTabs a[href="'+hash+'"]').tab('show');
 	    getTab(hash.substring(1,hash.length));
 	} else {
-		getTab('home');
+		getTab('clouds');
 	}
 	
 	// if history is modified/navigated, show the active tab

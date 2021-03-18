@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 PAGE_SIZE = 200;
@@ -22,25 +22,19 @@ def getUsers(retries):
 	try:
 		con = sqlite3.connect("/var/www/bot/database.db")
 		con.row_factory = sqlite3.Row
-		#mentions = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC")
-		cur = con.execute("SELECT *, COUNT(rowid) as counter FROM ticker_mentions GROUP BY user, ticker ORDER BY time_created DESC LIMIT ?", [PAGE_SIZE])
-		mentions = cur.fetchall()
+		cur = con.cursor()
+
+		mentions = cur.execute("SELECT *, COUNT(rowid) AS counter \
+		FROM ticker_mentions \
+		WHERE user IN \
+		(SELECT user FROM ticker_mentions GROUP BY user ORDER BY time_created DESC LIMIT ?) \
+		OR user IN \
+		(SELECT user FROM ticker_mentions GROUP BY user ORDER BY COUNT(rowid) DESC LIMIT ?) \
+		GROUP BY user, ticker \
+		ORDER BY time_created DESC", [PAGE_SIZE, PAGE_SIZE]).fetchall()
 		cur.close()
 
-		users = []
-		# string indices failed
-		for m in mentions:
-			if not any(m['user'] == u['name'] for u in users):
-				users.append({'name':m['user'], 'mentions':[], 'mention_count':0})
-			u = [u for u in users if u['name'] == m['user']][0]
-
-			ago = timeago.format(round(m[4]/1000), datetime.datetime.now())
-			link = "https://reddit.com/"+m['content_id'] if m['content_id'] else ''
-
-			u['mentions'].append({'ticker':m['ticker'], 'time':ago, 'rawtime':m['time_created'], 'blacklisted':m['blacklisted'], 'tagged':m['tagged'], 'count':m['counter'], 'link':link})
-			u['mention_count'] += m['counter']
-
-		# mentions.close()
+		users = formatMentionsByUser(mentions)
 
 	except sqlite3.OperationalError as e:
 		if retries > 2:
@@ -50,6 +44,52 @@ def getUsers(retries):
 			time.sleep(3)
 			return getUsers(retries)
 
+	return users
+
+def getUserBy(by, query):
+	con = sqlite3.connect("/var/www/bot/database.db")
+	con.row_factory = sqlite3.Row
+	cur = con.cursor()
+
+	lquery = '%'+query+'%'
+
+	if by == 'both':
+		mentions = cur.execute("SELECT *, COUNT(rowid) AS counter \
+		FROM ticker_mentions \
+		WHERE user LIKE ? \
+		OR ticker LIKE ? \
+		GROUP BY user, ticker \
+		ORDER BY time_created DESC", [lquery, query]).fetchall()
+	elif by == 'user':
+		mentions = cur.execute("SELECT *, COUNT(rowid) AS counter \
+		FROM ticker_mentions \
+		WHERE user LIKE ? \
+		GROUP BY user, ticker \
+		ORDER BY time_created DESC", [lquery]).fetchall()
+	elif by == 'ticker':
+		mentions = cur.execute("SELECT *, COUNT(rowid) AS counter \
+		FROM ticker_mentions \
+		WHERE ticker LIKE ? \
+		GROUP BY user, ticker \
+		ORDER BY time_created DESC", [query]).fetchall()
+
+	cur.close()
+
+	return formatMentionsByUser(mentions)
+
+
+def formatMentionsByUser(mentions):
+	users = []
+	for m in mentions:
+		if not any(m['user'] == u['name'] for u in users):
+			users.append({'name':m['user'], 'mentions':[], 'mention_count':0})
+		u = [u for u in users if u['name'] == m['user']][0]
+
+		ago = timeago.format(round(m[4]/1000), datetime.datetime.now())
+		link = "https://reddit.com/"+m['content_id'] if m['content_id'] else ''
+
+		u['mentions'].append({'ticker':m['ticker'], 'time':ago, 'rawtime':m['time_created'], 'blacklisted':m['blacklisted'], 'tagged':m['tagged'], 'count':m['counter'], 'link':link})
+		u['mention_count'] += m['counter']
 	return users
 
 
@@ -74,8 +114,8 @@ def getTickers(retries):
 
 		mentions = {}
 		for t in times:
-			mentions[t] = cur.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions WHERE time_created > ? GROUP BY ticker ORDER BY counter DESC LIMIT ?", [now-times[t], PAGE_SIZE]).fetchall()
-		mentions['mention_count'] = cur.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions GROUP BY ticker ORDER BY counter DESC LIMIT ?", [PAGE_SIZE]).fetchall()
+			mentions[t] = cur.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions WHERE time_created > ? GROUP BY ticker ORDER BY counter DESC", [now-times[t]]).fetchall()
+		mentions['mention_count'] = cur.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions GROUP BY ticker ORDER BY counter DESC").fetchall()
 		cur.close()
 
 		tickers = []
@@ -169,6 +209,14 @@ try:
 
 		import sqlite3
 		output = whoMentioned(args['ticker'].value)
+
+	if mode == 'search-user':
+		if 'by' not in args:
+			raise ArgumentError("no by argument")
+		if 'query' not in args:
+			raise ArgumentError("no query argument")
+		import sqlite3
+		output = getUserBy(args['by'].value, args['query'].value)
 
 
 except Exception as e:
