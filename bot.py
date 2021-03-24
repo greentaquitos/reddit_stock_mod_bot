@@ -533,4 +533,4 @@ class Bot:
 		con.commit()
 
 
-#b = Bot()
+b = Bot()
