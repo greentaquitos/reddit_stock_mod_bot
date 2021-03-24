@@ -19,6 +19,7 @@ USER_AGENT = "subreddit manager for /r/"+SUBREDDIT
 
 # api key from marketstack account
 MARKETSTACK_API_KEY = ""
+MARKETSTACK_SUB = False
 
 # reddit post flair to respond with a sticky to // leave blank to skip this
 # FLAIR_TO_ENGAGE = "" not in use

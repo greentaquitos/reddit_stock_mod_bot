@@ -10,6 +10,7 @@ import requests
 import re
 import timeago
 import datetime
+import pytz
 import logging
 
 from config import *
@@ -18,24 +19,27 @@ class Bot:
 
 	def __init__(self,debug=False):
 		# set up logging
-		logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %I:%M:%S %p', level=logging.INFO)
-		if debug:
-			logging.basicConfig(level=logging.DEBUG)
+		level = logging.DEBUG if debug else logging.INFO
+		logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %I:%M:%S %p', level=level)
 		
 		# run config
 		self.running = True
 		self.debug = debug
+		self.nytime = pytz.timezone('US/Eastern')
+		self.utc = pytz.utc
 
 		# track error handling
 		self.lastErrorNotif = 0
 		self.lastErrorDelay = 0
 		self.lastResetTime = 0
 		self.actionQueue = []
+		self.timedEvents = []
 
 		# init data
 		self.initWords()
 		self.initdb()
 		self.initReddit()
+		self.initTimedEvents()
 
 		if debug:
 			return
@@ -88,6 +92,22 @@ class Bot:
 				self.handleRuntimeError(e)
 
 			logging.debug('=== END OF QUEUE === ' + str(len(self.actionQueue)))
+
+			try:
+				for event in self.timedEvents[:]:
+					if self.running == False:
+						break
+					if event['time'] > datetime.datetime.today().astimezone(self.utc):
+						continue
+					self.timedEvents.remove(event)
+					if event['name'] == 'updateTickerList':
+						self.updateTickerList()
+						self.scheduleTickerUpdate()
+
+			except Exception as e:
+				self.handleRuntimeError(e)
+
+			logging.debug('=== END OF TIMERS ===')
 
 		logging.warning("running stopped!")
 
@@ -179,7 +199,6 @@ class Bot:
 		table = "\n".join(table) if len(mentions) > 0 else None
 		
 		return table
-
 
 
 	def getTickersFromString(self, content):
@@ -298,11 +317,14 @@ class Bot:
 		except sqlite3.OperationalError as e:
 			if str(e).startswith("no such table"):
 				self.createdb()
-				self.updateTickerList()
 			else:
 				logging.error("Error with initdb: "+str(e))
 				self.running = False
 
+		self.initTickerSets()
+	
+
+	def initTickerSets(self):
 		cur = self.con.execute("SELECT symbol,name FROM tickers WHERE symbol NOT LIKE '%.%' AND symbol IS NOT NULL AND name IS NOT NULL AND symbol != '' and name != ''")
 		tickers = cur.fetchall()
 		cur.close()
@@ -327,10 +349,45 @@ class Bot:
 		self.words = set([w.upper() for w in self.words])
 
 
+	def scheduleTickerUpdate(self):
+		# nextTickerTime = self.getNextTickerTime()		
+		# nextTickerTime = now_utc + datetime.timedelta(minutes=2)
+		
+		now_utc = datetime.datetime.today().astimezone(self.utc)
+
+		# update ticker list daily at slowest hour or monthly for the test bot
+		if MARKETSTACK_SUB:
+			nextTickerTime = (now_utc + datetime.timedelta(1)).replace(hour=6, minute=5) if now_utc.hour >= 6 else now_utc.replace(hour=6, minute=5)
+		else:
+			nextTickerTime = (now_utc.replace(day=1) + datetime.timedelta(days=32)).replace(day=1)
+
+		self.timedEvents.append({'name':"updateTickerList",'time':nextTickerTime})
+
+	# gets next open or close -- unused
+	def getNextTickerTime(self):
+		if MARKETSTACK_SUB:
+			# next open or close
+			ny_now = datetime.datetime.today().astimezone(self.nytime)
+			
+			target_hour = 9 if ny_now.hour > 15 or ny_now.weekday() > 4 else 16
+			target_minute = 35 if target_hour == 9 else 5
+
+			if target_hour == 9:
+				ny_now = self.nytime.normalize(ny_now + datetime.timedelta(1))
+
+			while ny_now.weekday() > 4 or (ny_now.weekday() == 4 and ny_now.hour > 15):
+				ny_now = self.nytime.normalize( ny_now + datetime.timedelta(1) )
+
+			return ny_now.replace(hour=target_hour, minute=target_minute)
+		
+		else:
+			# first of the month, not picky about time
+			return (datetime.datetime.today().replace(day=1) + datetime.timedelta(days=32)).replace(day=1).astimezone(self.utc)
+
+
 	def updateTickerList(self):
 		logging.info("updating ticker list (this may take a while)...")
 
-		start_time = round(time.time()*1000)
 		total = 1001
 		i = 0
 
@@ -340,6 +397,7 @@ class Bot:
 			p = {"access_key": MARKETSTACK_API_KEY, "limit":"1000"}
 			total = rj['pagination']['total'] if i == 1 else total
 			p["offset"] = str(1000*i)
+			logging.debug("got "+p['offset']+" tickers out of "+str(total))
 			r = requests.get("http://api.marketstack.com/v1/tickers", params=p)
 			rj = r.json()
 			for ticker in rj['data']:
@@ -350,6 +408,41 @@ class Bot:
 		cur.close()
 
 		logging.info("built ticker list")
+		self.initTickerSets()
+
+	# get all ticker prices -- unused
+	def updateTickerPrices(self):
+		logging.info("updating ticker prices...")
+
+		total = 101
+		i = 0
+
+		tod = datetime.datetime.today().astimezone(self.nytime)
+
+		endpoint = "/eod/latest" if tod.hour > 16 or tod.hour < 9 or (tod.hour == 9 and tod.minute < 30) or tod.weekday() > 4 else "/intraday/latest"
+		ttype = "close" if endpoint == "/eod/latest" else "open"
+		tlist = list(self.tickers)
+
+		cur = self.con.cursor()
+
+		while 100*i < int(total):
+			offset = 100*i
+			logging.debug("getting tickers "+str(offset)+" thru "+str(offset+100))
+			tickers = tlist[offset:offset+100]
+			symbols = ','.join([t for t in tickers])			
+			p = {"access_key": MARKETSTACK_API_KEY,"symbols":symbols}
+			# only do 2 pages if we don't have a sub / using test account
+			total = rj['pagination']['total'] if i == 1 and MARKETSTACK_SUB else total
+			r = requests.get("http://api.marketstack.com/v1"+endpoint,params=p)
+			rj = r.json()
+			for ticker in rj['data']:
+				cur.execute("INSERT INTO ticker_info (symbol, time_created, price, type) VALUES (?,?,?,?)", [ticker['symbol'],round(time.time()*1000),ticker[ttype],ttype])
+			i += 1
+
+		self.con.commit()
+		cur.close()
+
+		logging.info("updated ticker prices")
 
 
 	def createdb(self):
