@@ -117,6 +117,8 @@ class Bot:
 		logging.info("c "+comment.id+": "+ascii(b))
 
 		tickers = self.getTickersFromString(comment.body)
+		if any(t['is_over'] for t in tickers):
+			logging.info("unpenny stocks detected!")
 		self.saveTickerMentions(comment, tickers)
 		
 
@@ -125,8 +127,58 @@ class Bot:
 		logging.info("p "+post.id+": "+ascii(b))
 
 		tickers = self.getTickersFromString(post.title+' '+post.selftext)
+		if any(t['is_over'] for t in tickers):
+			logging.info("unpenny stocks detected!")
 		self.engageWith(post, tickers)
 		self.saveTickerMentions(post, tickers)
+
+
+	def isPennyStock(self, ticker):
+		logging.debug("isPennyStock? "+ticker)
+		month_ago = round(time.time()*1000 - (1000*60*60*24*30))
+
+		# we've logged it as under 5 in the past month
+
+		cur = self.con.execute("SELECT * FROM ticker_prices WHERE time_created > ? AND symbol = ? AND price < 5 LIMIT 1", [month_ago, ticker])
+		logged_low = len(cur.fetchall()) > 0
+		cur.close()
+
+		if logged_low:
+			logging.debug("data found: yes")
+			return True
+
+		# we've logged it as over 5 in the past day
+
+		day_ago = round(time.time()*1000 - (1000*60*60*24))
+		cur = self.con.execute("SELECT * FROM ticker_prices WHERE time_created > ? AND symbol = ?", [day_ago, ticker])
+		logged = len(cur.fetchall()) > 0
+		cur.close()
+
+		if logged:
+			logging.debug("data found: no")
+			return False
+
+		# we haven't logged it recently
+
+		price = self.getPriceFromMarketstack(ticker)
+
+		cur = self.con.execute("INSERT INTO ticker_prices (symbol, price, time_created) VALUES (?,?,?)", [ticker, str(price['rn']), round(time.time()*1000)])
+		self.con.commit()
+		cur.close()
+
+		if price['30dlow'] < 5:
+			logging.debug("data requested: yes")
+			return True
+		else:
+			logging.debug("data requested: no")
+			return False
+
+
+	def getPriceFromMarketstack(self, ticker):
+		p = {"access_key": MARKETSTACK_API_KEY, "symbols":ticker, "limit":20}
+		r = requests.get("http://api.marketstack.com/v1/eod", params=p)
+		rj = r.json()
+		return {'30dlow': min(d['low'] for d in rj['data']), 'rn':rj['data'][0]['low']}
 
 
 	def engageWith(self, post, tickers):
@@ -182,6 +234,8 @@ class Bot:
 		sticky = post.reply(response)
 		sticky.mod.distinguish(how="yes",sticky=True)
 
+		self.logBotAction("engageWith", post.author.name, post.permalink)
+
 
 	def makeMentionTable(self, author, tickers):
 		cur = self.con.execute("SELECT ticker, COUNT(rowid) as counter FROM ticker_mentions WHERE user = ? AND content_type = 'c' GROUP BY ticker ORDER BY counter DESC", [author.name])
@@ -229,7 +283,7 @@ class Bot:
 			tickers.update(t)
 
 		# make them objs w/ tag info
-		tickers = [{'ticker':x, 'is_over':0, 'is_crypto':0, 'was_tagged':(1 if x in tagged_content else 0)} for x in set(tickers)]
+		tickers = [{'ticker':x, 'is_over':(0 if self.isPennyStock(x) else 1), 'is_crypto':0, 'was_tagged':(1 if x in tagged_content else 0)} for x in set(tickers)]
 
 		return tickers
 
@@ -391,28 +445,28 @@ class Bot:
 		total = 1001
 		i = 0
 
-		cur = self.con.cursor()
-
 		while 1000*i < int(total):
 			p = {"access_key": MARKETSTACK_API_KEY, "limit":"1000"}
 			total = rj['pagination']['total'] if i == 1 else total
 			p["offset"] = str(1000*i)
-			logging.debug("got "+p['offset']+" tickers out of "+str(total))
+
 			r = requests.get("http://api.marketstack.com/v1/tickers", params=p)
 			rj = r.json()
-			for ticker in rj['data']:
-				cur.execute("INSERT OR IGNORE INTO tickers (symbol, name, time_created, is_crypto) VALUES (?,?,?, 0)", [ticker['symbol'],ticker['name'],round(time.time()*1000)])
+			tickers = [(t['symbol'], t['name'], round(time.time()*1000)) for t in rj['data']]
+			
+			cur = self.con.executemany("INSERT OR IGNORE INTO tickers (symbol, name, time_created, is_crypto) VALUES (?,?,?, 0)", tickers)
+			logging.debug("got "+p['offset']+" tickers out of "+str(total)+"; saved "+str(cur.rowcount))
+			self.con.commit()
+			cur.close()
+
 			i+=1
 
-		self.con.commit()
-		cur.close()
-
 		logging.info("built ticker list")
-		self.logBotAction("updateTickerList")
+		self.logBotAction("updateTickerList", None, None)
 		self.initTickerSets()
 
 
-	def logBotAction(self, action):
+	def logBotAction(self, action, user, note):
 		cur = self.con.execute("INSERT INTO bot_actions (type, time_created) VALUES (?,?)", [action, round(time.time()*1000)])
 		self.con.commit()
 		cur.close()
@@ -464,6 +518,7 @@ class Bot:
 			"bot_errors (info string, time_created int)",
 			"outside_activity (subreddit string, user string, time_created int)",
 			"tickers (symbol string UNIQUE, name string, last_close string, is_crypto int, time_updated int, time_created int)",
+			"ticker_prices (symbol string, price string, price_type string, time_created int)",
 			"test_table (test_data string)"
 		]
 
@@ -478,4 +533,4 @@ class Bot:
 		con.commit()
 
 
-b = Bot()
+#b = Bot()
