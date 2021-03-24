@@ -39,7 +39,7 @@ class Bot:
 		self.initWords()
 		self.initdb()
 		self.initReddit()
-		self.initTimedEvents()
+		self.scheduleTickerUpdate()
 
 		if debug:
 			return
@@ -408,7 +408,15 @@ class Bot:
 		cur.close()
 
 		logging.info("built ticker list")
+		self.logBotAction("updateTickerList")
 		self.initTickerSets()
+
+
+	def logBotAction(self, action):
+		cur = self.con.execute("INSERT INTO bot_actions (type, time_created) VALUES (?,?)", [action, round(time.time()*1000)])
+		self.con.commit()
+		cur.close()
+
 
 	# get all ticker prices -- unused
 	def updateTickerPrices(self):
