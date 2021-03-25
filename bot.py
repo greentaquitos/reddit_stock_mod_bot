@@ -162,6 +162,10 @@ class Bot:
 
 		price = self.getPriceFromMarketstack(ticker)
 
+		if price == None:
+			logging.debug("no price data: yes?")
+			return True
+
 		cur = self.con.execute("INSERT INTO ticker_prices (symbol, price, time_created) VALUES (?,?,?)", [ticker, str(price['rn']), round(time.time()*1000)])
 		self.con.commit()
 		cur.close()
@@ -178,6 +182,11 @@ class Bot:
 		p = {"access_key": MARKETSTACK_API_KEY, "symbols":ticker, "limit":20}
 		r = requests.get("http://api.marketstack.com/v1/eod", params=p)
 		rj = r.json()
+		
+		if len(rj['data']) < 1:
+			self.handleRuntimeError("no price data for ticker: "+ticker)
+			return None
+
 		return {'30dlow': min(d['low'] for d in rj['data']), 'rn':rj['data'][0]['low']}
 
 
