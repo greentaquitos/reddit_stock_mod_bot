@@ -117,9 +117,10 @@ class Bot:
 		logging.info("c "+comment.id+": "+ascii(b))
 
 		tickers = self.getTickersFromString(comment.body)
-		if any(t['is_over'] for t in tickers):
-			logging.info("unpenny stocks detected!")
 		self.saveTickerMentions(comment, tickers)
+		
+		if any(t['is_over'] for t in tickers):
+			self.flagContent(comment)
 		
 
 	def onSubPost(self, post):
@@ -127,10 +128,15 @@ class Bot:
 		logging.info("p "+post.id+": "+ascii(b))
 
 		tickers = self.getTickersFromString(post.title+' '+post.selftext)
-		if any(t['is_over'] for t in tickers):
-			logging.info("unpenny stocks detected!")
 		self.engageWith(post, tickers)
 		self.saveTickerMentions(post, tickers)
+
+		if any(t['is_over'] for t in tickers):
+			self.flagContent(post)
+
+
+	def flagContent(self, content):
+		logging.debug("flagContent")
 
 
 	def isPennyStock(self, ticker):
@@ -146,17 +152,6 @@ class Bot:
 		if logged_low:
 			logging.debug("data found: yes")
 			return True
-
-		# we've logged it as over 5 in the past day
-
-		day_ago = round(time.time()*1000 - (1000*60*60*24))
-		cur = self.con.execute("SELECT * FROM ticker_prices WHERE time_created > ? AND symbol = ?", [day_ago, ticker])
-		logged = len(cur.fetchall()) > 0
-		cur.close()
-
-		if logged:
-			logging.debug("data found: no")
-			return False
 
 		# we haven't logged it recently
 
